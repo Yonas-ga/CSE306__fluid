@@ -52,16 +52,24 @@ Vector operator/(const Vector& a, const double b) {
 double dot(const Vector& a, const Vector& b) {
     return a[0] * b[0] + a[1] * b[1];
 }
-
+double cross(const Vector& a, const Vector& b) {
+	return a[0]*b[1] - a[1]*b[0];    //https://wumbo.net/formulas/cross-product-2d/
+}
 
 class Polygon {
 public:
 
     double area() {
         if (vertices.size() < 3) return 0;
-        // TODO Lab 3
+        // TODO Lab 2
         // Compute the area of the polygon
-        return -111;
+        double A = 0;
+        for (int i=0; i<vertices.size();i++){ //we "loop around" instead of doing a case for the last i
+            A+= vertices[i][0]*vertices[(i+1) %(vertices.size()-1)][1] - vertices[(i+1) %(vertices.size()-1)][0]*vertices[i][1];        //https://www.geeksforgeeks.org/cpp/modulo-operator-in-c-cpp-with-examples/
+        }  
+        A= abs(A); //https://www.w3schools.com/CPP/ref_math_abs.asp
+        A=A/2;
+        return A;
     }
 
     Vector centroid() {
@@ -75,10 +83,28 @@ public:
     double integral_square_distance(const Vector& Pi) {
         if (vertices.size() < 3) return 0;
 
-        // TODO Lab 3
+        // TODO Lab 2
         // Compute the integral of ||x-Pi||^2 over the polygon
-
-        return -111;
+        double sum=0;
+        Vector c1 = vertices[0];
+        Vector c2,c3;
+        for (int i=1; i<vertices.size()-1;i++){
+            c2 = vertices[i];
+            c3=vertices[i+1];
+            double T = cross(c2-c1,c3-c1);
+            T=abs(T);
+            T=T/2;
+            double tmp =0;
+            // Please excuse me, this is gonna be ugly, but to do sum_1<k<l<3 and to translate these into a map to go from 1<k<3 to 0,i,i+ is gonna be annoying. as there are not that many, i will copy paste this many times. please excuse me, i know how to code this properly, but i dont want to import map and create a dictionary
+            tmp += dot(c1-Pi,c1-Pi);
+            tmp += dot(c1-Pi,c2-Pi);
+            tmp += dot(c1-Pi,c3-Pi);
+            tmp += dot(c2-Pi,c2-Pi);
+            tmp += dot(c2-Pi,c3-Pi);
+            tmp += dot(c3-Pi,c3-Pi);
+            sum += (T/6) * tmp;
+        }
+        return sum;
     }
 
     std::vector<Vector> vertices;
@@ -214,7 +240,20 @@ public:
 
 
     void compute() {
-
+        for (int i=0; i<points.size(); i++){
+            Polygon square;
+            square.vertices.push_back(Vector(0,0));
+            square.vertices.push_back(Vector(0,1));
+            square.vertices.push_back(Vector(1,1));
+            square.vertices.push_back(Vector(1,0));
+            for (int j=0;j<points.size();j++){
+                if (i!=j){
+                    square = clip_by_bisector(square, points[i],points[j],0,0);
+                }
+                
+            }
+            cells.push_back(square);
+        }
         // TODO Lab 1 (Voronoi)
         // For all sites Pi (in parallel) :
         //      Start with a unit square
@@ -243,7 +282,40 @@ public:
         // TODO Lab 2 (Semi-Discrete Optimal Transport) : extend to Laguerre cells, i.e., w0 != w1
 
         Polygon result;
-
+        for (int i=0; i<V.vertices.size()-1; i++){
+            bool tmp = (V.vertices[i]-P0).norm2() -w0<= (V.vertices[i]-Pi).norm2()-wi;
+            bool tmp2 = (V.vertices[i+1]-P0).norm2() -w0<= (V.vertices[i+1]-Pi).norm2()-wi;
+            if (tmp && tmp2){
+                result.vertices.push_back(V.vertices[i+1]);
+            } else if (!tmp && !tmp2){
+                ;
+            } else if (!tmp && tmp2){
+                //result.vertices.push_back(V.vertices[i]+ ((dot(((P0+Pi)/2)-V.vertices[i],Pi-P0)/dot(V.vertices[i+1]-V.vertices[i],Pi-P0))*(V.vertices[i+1]-V.vertices[i])));
+                Vector M = ((P0+Pi)/2) + ((w0-wi)/(2*(P0-Pi).norm2()))*(Pi-P0);
+                result.vertices.push_back(V.vertices[i]+ ((dot(M-V.vertices[i],Pi-P0)/dot(V.vertices[i+1]-V.vertices[i],Pi-P0))*(V.vertices[i+1]-V.vertices[i])));
+                result.vertices.push_back(V.vertices[i+1]);
+            } else {
+                //result.vertices.push_back(V.vertices[i]+ ((dot(((P0+Pi)/2)-V.vertices[i],Pi-P0)/dot(V.vertices[i+1]-V.vertices[i],Pi-P0))*(V.vertices[i+1]-V.vertices[i])));
+                Vector M = ((P0+Pi)/2) + ((w0-wi)/(2*(P0-Pi).norm2()))*(Pi-P0);
+                result.vertices.push_back(V.vertices[i]+ ((dot(M-V.vertices[i],Pi-P0)/dot(V.vertices[i+1]-V.vertices[i],Pi-P0))*(V.vertices[i+1]-V.vertices[i])));
+            }
+        }
+        bool tmp = (V.vertices[V.vertices.size()-1]-P0).norm2()-w0 <= (V.vertices[V.vertices.size()-1]-Pi).norm2()-wi;
+        bool tmp2 = (V.vertices[0]-P0).norm2()-w0 <= (V.vertices[0]-Pi).norm2()-wi;
+        if (tmp && tmp2){
+            result.vertices.push_back(V.vertices[0]);
+        } else if (!tmp && !tmp2){
+            ;
+        } else if (!tmp && tmp2){
+            //result.vertices.push_back(V.vertices[V.vertices.size()-1]+ ((dot(((P0+Pi)/2)-V.vertices[V.vertices.size()-1],Pi-P0)/dot(V.vertices[0]-V.vertices[V.vertices.size()-1],Pi-P0))*(V.vertices[0]-V.vertices[V.vertices.size()-1])));
+            Vector M = ((P0+Pi)/2) + ((w0-wi)/(2*(P0-Pi).norm2()))*(Pi-P0);
+            result.vertices.push_back(V.vertices[V.vertices.size()-1]+ ((dot(M-V.vertices[V.vertices.size()-1],Pi-P0)/dot(V.vertices[0]-V.vertices[V.vertices.size()-1],Pi-P0))*(V.vertices[0]-V.vertices[V.vertices.size()-1])));
+            result.vertices.push_back(V.vertices[0]);
+        } else {
+            //result.vertices.push_back(V.vertices[V.vertices.size()-1]+ ((dot(((P0+Pi)/2)-V.vertices[V.vertices.size()-1],Pi-P0)/dot(V.vertices[0]-V.vertices[V.vertices.size()-1],Pi-P0))*(V.vertices[0]-V.vertices[V.vertices.size()-1]))); 
+            Vector M = ((P0+Pi)/2) + ((w0-wi)/(2*(P0-Pi).norm2()))*(Pi-P0);
+            result.vertices.push_back(V.vertices[V.vertices.size()-1]+ ((dot(M-V.vertices[V.vertices.size()-1],Pi-P0)/dot(V.vertices[0]-V.vertices[V.vertices.size()-1],Pi-P0))*(V.vertices[0]-V.vertices[V.vertices.size()-1])));
+        }
         return result;
     }
 
@@ -287,8 +359,16 @@ static lbfgsfloatval_t evaluate(
    
     // Lab 2 (Optimal transport) : compute the function to be minimized (fx) and its gradient (g[i], i=0..n-1)
     // Lab 3 (fluid) : adapt these functions to support partial optimal transport (now "n" has been increased by 1 to account for the air variable)
-    
+    double lambda = 1.0/n;
     lbfgsfloatval_t fx = 0.0;
+    for (int i=0;i<n;i++){
+        fx += ot->vor.cells[i].integral_square_distance(ot->vor.points[i]);
+        fx -= ot->vor.cells[i].area()*ot->vor.weights[i];
+        fx += lambda*ot->vor.weights[i];
+
+        g[i]=lambda- ot->vor.cells[i].area();
+    }
+    
     // g[i] = ...
     // fx = ...
 
@@ -381,8 +461,15 @@ int main() {
 
     std::vector<Polygon> s;
     s.push_back(p);
+    VoronoiDiagram tmp;
+    for (int i=0;i<205;i++){
+        tmp.points.push_back(Vector(((double)rand()) / RAND_MAX,((double)rand()) / RAND_MAX)); // https://www.geeksforgeeks.org/cpp/generate-a-random-number-between-0-and-1/
+    }
+    tmp.compute();
+    s=tmp.cells;
+    
 
     save_frame(s, "toto");
-    save_svg(s, "toto.svg");
+    save_svg(s, "toto.svg", &tmp.points);
     return 0;
-} 
+}
