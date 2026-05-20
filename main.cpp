@@ -248,7 +248,7 @@ public:
             square.vertices.push_back(Vector(1,0));
             for (int j=0;j<points.size();j++){
                 if (i!=j){
-                    square = clip_by_bisector(square, points[i],points[j],0,0);
+                    square = clip_by_bisector(square, points[i],points[j],weights[i],weights[j]);
                 }
                 
             }
@@ -323,7 +323,7 @@ public:
     std::vector<Vector> points;    // Lab 1 (Voronoi) : the sites to consider
 
     std::vector<double> weights;   // Lab 2 (OT) : the weight associated to each site (the Laguerre weight, i.e. the dual optimal transport variables to be optimized)
-    
+
     std::vector<Polygon> cells;   // Lab 1 : the polygons representing each individual cell
 
 };
@@ -400,6 +400,7 @@ void OptimalTransport::optimize() {
 
     // run the LBFGS optimizer
     int ret = lbfgs(weights.size(), &weights[0], &fx, evaluate, progress, (void*)this, &param);
+    printf("AHHH %d\n", ret);
 
     // copy the result back to the voronoi structure
     vor.weights = weights;
@@ -461,15 +462,16 @@ int main() {
 
     std::vector<Polygon> s;
     s.push_back(p);
-    VoronoiDiagram tmp;
+    OptimalTransport ot;
     for (int i=0;i<205;i++){
-        tmp.points.push_back(Vector(((double)rand()) / RAND_MAX,((double)rand()) / RAND_MAX)); // https://www.geeksforgeeks.org/cpp/generate-a-random-number-between-0-and-1/
+        ot.vor.points.push_back(Vector(((double)rand()) / RAND_MAX,((double)rand()) / RAND_MAX)); // https://www.geeksforgeeks.org/cpp/generate-a-random-number-between-0-and-1/
+        ot.vor.weights.push_back(0);
     }
-    tmp.compute();
-    s=tmp.cells;
+    ot.optimize();
+    s=ot.vor.cells;
     
 
     save_frame(s, "toto");
-    save_svg(s, "toto.svg", &tmp.points);
+    save_svg(s, "toto.svg", &ot.vor.points);
     return 0;
 }
