@@ -65,7 +65,7 @@ public:
         // Compute the area of the polygon
         double A = 0;
         for (int i=0; i<vertices.size();i++){ //we "loop around" instead of doing a case for the last i
-            A+= vertices[i][0]*vertices[(i+1) %(vertices.size()-1)][1] - vertices[(i+1) %(vertices.size()-1)][0]*vertices[i][1];        //https://www.geeksforgeeks.org/cpp/modulo-operator-in-c-cpp-with-examples/
+            A+= vertices[i][0]*vertices[(i+1) %(vertices.size())][1] - vertices[(i+1) %(vertices.size())][0]*vertices[i][1];        //https://www.geeksforgeeks.org/cpp/modulo-operator-in-c-cpp-with-examples/
         }  
         A= abs(A); //https://www.w3schools.com/CPP/ref_math_abs.asp
         A=A/2;
@@ -76,8 +76,17 @@ public:
         if (vertices.size() < 3) return Vector(0, 0);
         // TODO Lab 3
         // Compute the centroid of the polygon
+        double A = area()*6;
+        double Cx = 0;
+        double Cy = 0;
+        for (int i=0; i<vertices.size();i++){ //Formula found in the lecture notes
+            Cx += (vertices[i][0] + vertices[(i+1)%vertices.size()][0])*((vertices[i][0]*vertices[(i+1)%vertices.size()][1])-(vertices[(i+1)%vertices.size()][0]*vertices[i][1]));
+            Cy += (vertices[i][1] + vertices[(i+1)%vertices.size()][1])*((vertices[i][0]*vertices[(i+1)%vertices.size()][1])-(vertices[(i+1)%vertices.size()][0]*vertices[i][1]));
+        }
+        Cx = Cx/A;
+        Cy = Cy/A;
 
-        return Vector(-111,-111);
+        return Vector(Cx,Cy);
     }
 
     double integral_square_distance(const Vector& Pi) {
@@ -240,6 +249,7 @@ public:
 
 
     void compute() {
+        cells.resize(points.size()); // Doing this instead of clear and push_back because a class mate noticed i was doing something inefficient.
         for (int i=0; i<points.size(); i++){
             Polygon square;
             square.vertices.push_back(Vector(0,0));
@@ -250,9 +260,17 @@ public:
                 if (i!=j){
                     square = clip_by_bisector(square, points[i],points[j],weights[i],weights[j]);
                 }
-                
             }
-            cells.push_back(square);
+            double pi = 2*acos(0.0); // https://www.geeksforgeeks.org/cpp/pi-in-c-with-examples/
+            double radius = (weights[i]-weights[weights.size()-1]);
+            if (radius > 0){
+                radius = sqrt(radius);
+                for (int j=0; j<50;j++){
+                    square = clip_by_edge(square, Vector(points[i][0] + (radius*cos(j*pi/25)),points[i][1] + (radius*sin(j*pi/25))), Vector(points[i][0] + (radius*cos(((j+1)%50)*pi/25)),points[i][1] + (radius*sin(((j+1)%50)*pi/25))) );     // https://www.w3schools.com/cpp/ref_math_cos.asp  
+                    // https://stackoverflow.com/questions/4707796/use-x-y-coordinates-to-plot-points-inside-a-circle#:~:text=x%20%3D%20R*cos(theta,Cartesian%20points%20for%20a%20circle.
+                }
+            }
+            cells[i] = square;
         }
         // TODO Lab 1 (Voronoi)
         // For all sites Pi (in parallel) :
@@ -270,7 +288,20 @@ public:
         // Will be used to clip a polygon (a cell) by all the edges of a (discretized) disk
 
         Polygon result;
-
+        for (int i=0; i<V.vertices.size(); i++){
+            Vector A=V.vertices[i];
+            Vector B=V.vertices[(i+1)%V.vertices.size()];
+            Vector N((v-u)[1],-(v-u)[0]);
+            Vector P = A + ( (dot(u-A,N)/dot(B-A, N))*(B-A));
+            if (dot(u-B,N)>=0){
+                if (dot(u-A,N)<0){
+                    result.vertices.push_back(P);
+                }
+                result.vertices.push_back(B);
+            } else if (dot(u-A,N)>=0) {
+                result.vertices.push_back(P);
+            }
+        }
         return result;
     }
 
@@ -282,6 +313,9 @@ public:
         // TODO Lab 2 (Semi-Discrete Optimal Transport) : extend to Laguerre cells, i.e., w0 != w1
 
         Polygon result;
+        if (V.vertices.empty()){
+            return result;
+        }
         for (int i=0; i<V.vertices.size()-1; i++){
             bool tmp = (V.vertices[i]-P0).norm2() -w0<= (V.vertices[i]-Pi).norm2()-wi;
             bool tmp2 = (V.vertices[i+1]-P0).norm2() -w0<= (V.vertices[i+1]-Pi).norm2()-wi;
@@ -361,13 +395,25 @@ static lbfgsfloatval_t evaluate(
     // Lab 3 (fluid) : adapt these functions to support partial optimal transport (now "n" has been increased by 1 to account for the air variable)
     double lambda = 1.0/n;
     lbfgsfloatval_t fx = 0.0;
-    for (int i=0;i<n;i++){
+    double desired_vol_fluid = 0.6;
+    for (int i=0;i<n-1;i++){ //i think its n-1 because of whats written just above TOCHECK
+        // fx += ot->vor.cells[i].integral_square_distance(ot->vor.points[i]);
+        // fx -= ot->vor.cells[i].area()*ot->vor.weights[i];
+        // fx += lambda*ot->vor.weights[i];
         fx += ot->vor.cells[i].integral_square_distance(ot->vor.points[i]);
         fx -= ot->vor.cells[i].area()*ot->vor.weights[i];
-        fx += lambda*ot->vor.weights[i];
+        fx += ot->vor.weights[i]*(desired_vol_fluid/(n-1));
 
-        g[i]=lambda- ot->vor.cells[i].area();
+        g[i] = ot->vor.cells[i].area() - desired_vol_fluid/(n-1);
     }
+    double estimated_vol_air =0;
+    for (int j=0;j<n-1;j++){
+        estimated_vol_air += ot->vor.cells[j].area();
+    }
+    estimated_vol_air = 1-estimated_vol_air;
+    fx += (1 - desired_vol_fluid - estimated_vol_air)*ot->vor.weights[n-1];
+    g[n-1] = estimated_vol_air - (1 - desired_vol_fluid);
+
     
     // g[i] = ...
     // fx = ...
@@ -454,6 +500,16 @@ public:
 
 int main() {
 
+    Polygon test;
+    test.vertices.push_back(Vector(0,0));
+    test.vertices.push_back(Vector(0,1));
+    test.vertices.push_back(Vector(1,1));
+    test.vertices.push_back(Vector(1,0));
+    double aaa = test.integral_square_distance(Vector(1.5,1.5));
+    double bbb = test.integral_square_distance(Vector(0.5,0.5));
+    std::cout << aaa << std::endl;
+    std::cout << bbb << std::endl;
+
     Polygon p;
     p.vertices.push_back(Vector(0.1, 0.2));
     p.vertices.push_back(Vector(0.6, 0.4));
@@ -463,10 +519,11 @@ int main() {
     std::vector<Polygon> s;
     s.push_back(p);
     OptimalTransport ot;
-    for (int i=0;i<205;i++){
+    for (int i=0;i<600;i++){
         ot.vor.points.push_back(Vector(((double)rand()) / RAND_MAX,((double)rand()) / RAND_MAX)); // https://www.geeksforgeeks.org/cpp/generate-a-random-number-between-0-and-1/
-        ot.vor.weights.push_back(0);
+        ot.vor.weights.push_back(0.0003);
     }
+    ot.vor.weights.push_back(0);
     ot.optimize();
     s=ot.vor.cells;
     
@@ -474,4 +531,4 @@ int main() {
     save_frame(s, "toto");
     save_svg(s, "toto.svg", &ot.vor.points);
     return 0;
-} 
+}
