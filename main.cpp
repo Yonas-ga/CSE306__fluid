@@ -474,4 +474,4 @@ int main() {
     save_frame(s, "toto");
     save_svg(s, "toto.svg", &ot.vor.points);
     return 0;
-}
+} 
